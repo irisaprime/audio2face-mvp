@@ -29,7 +29,7 @@ backend/.installed
 .DS_Store
 Thumbs.db
 
-# SDK and Models (large files)
+# SDK and Models (large files - downloadable)
 Audio2Face-3D-SDK/
 *.onnx
 *.plan
@@ -40,7 +40,7 @@ Audio2Face-3D-SDK/
 node_modules/
 *.log
 
-# Test files
+# Test files (generated)
 test_audio/*.wav
 !test_audio/generate_test_audio.py
 

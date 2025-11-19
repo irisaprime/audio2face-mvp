@@ -122,14 +122,12 @@ build-sdk: ## Build Audio2Face SDK from source (GPU required)
 download-model: ## Download Audio2Face model from Hugging Face
 	@echo "$(COLOR_BOLD)Downloading Audio2Face model...$(COLOR_RESET)"
 	@echo "$(COLOR_YELLOW)Make sure you've logged in: huggingface-cli login$(COLOR_RESET)"
-	@if [ ! -d "$(SDK_DIR)" ]; then \
-		echo "SDK directory not found. Run 'make setup-sdk' first"; \
-		exit 1; \
+	@if ! command -v huggingface-cli >/dev/null 2>&1; then \
+		echo "$(COLOR_YELLOW)Installing huggingface-cli...$(COLOR_RESET)"; \
+		pip install -U "huggingface_hub[cli]"; \
 	fi
-	@cd $(SDK_DIR) && \
-		$(PYTHON) tools/download_models.py \
-			--model nvidia/Audio2Face-3D-v3.0 \
-			--output models/
+	@huggingface-cli download nvidia/Audio2Face-3D-v3.0 \
+		--local-dir $(SDK_DIR)/models/Audio2Face-3D-v3.0
 	@echo "$(COLOR_GREEN)✓ Model downloaded$(COLOR_RESET)"
 
 get-avatar: ## Instructions to get Ready Player Me avatar
