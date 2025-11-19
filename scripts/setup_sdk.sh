@@ -64,18 +64,19 @@ fi
 echo ""
 echo "Building SDK..."
 
-# Use conda CUDA if available
-if [ -d "$CONDA_PREFIX/bin" ] && [ -f "$CONDA_PREFIX/bin/nvcc" ]; then
-    CUDA_ROOT="$CONDA_PREFIX"
-    echo "Using conda CUDA at: $CUDA_ROOT"
-else
-    CUDA_ROOT="/usr/local/cuda"
-    echo "Using system CUDA at: $CUDA_ROOT"
-fi
+# Use system CUDA (more reliable than conda CUDA for building)
+CUDA_ROOT="/usr/local/cuda"
+TENSORRT_ROOT="/usr/local/TensorRT"
+echo "Using system CUDA at: $CUDA_ROOT"
+echo "Using TensorRT at: $TENSORRT_ROOT"
+export CUDA_PATH="$CUDA_ROOT"
+export PATH="$CUDA_ROOT/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_ROOT/lib64:$TENSORRT_ROOT/lib:$LD_LIBRARY_PATH"
 
 cmake -B _build -S . \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCUDA_TOOLKIT_ROOT_DIR="$CUDA_ROOT"
+    -DCUDA_TOOLKIT_ROOT_DIR="$CUDA_ROOT" \
+    -DTENSORRT_ROOT_DIR="$TENSORRT_ROOT"
 
 cmake --build _build --config Release -- -j$(nproc)
 

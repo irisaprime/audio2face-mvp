@@ -11,7 +11,7 @@ class Audio2FaceSDK:
     def __init__(self):
         # Load shared library
         if config.SDK_PATH.exists():
-            lib_name = "audio2face-sdk.dll" if sys.platform == "win32" else "libaudio2face-sdk.so"
+            lib_name = "audio2x.dll" if sys.platform == "win32" else "libaudio2x.so"
             lib_path = config.SDK_PATH / lib_name
             if lib_path.exists():
                 self.lib = ctypes.CDLL(str(lib_path))
