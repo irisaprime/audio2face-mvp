@@ -15,6 +15,8 @@ PYTHON := python3
 VENV_DIR := $(BACKEND_DIR)/venv
 BACKEND_PORT := 8000
 FRONTEND_PORT := 3000
+TENSORRT_DIR := $(PROJECT_ROOT)/libs/TensorRT
+TENSORRT_LIB := $(TENSORRT_DIR)/lib
 
 # Colors for output
 COLOR_RESET := \033[0m
@@ -433,3 +435,51 @@ version: ## Show version information
 	@if command -v tmux >/dev/null 2>&1; then \
 		echo "Tmux: $$(tmux -V)"; \
 	fi
+
+##@ TensorRT & Restart Recovery
+
+setup-tensorrt: ## Download and cache TensorRT in persistent storage
+	@echo "$(COLOR_BOLD)Setting up TensorRT...$(COLOR_RESET)"
+	@if [ ! -f "$(SCRIPTS_DIR)/setup_tensorrt.sh" ]; then \
+		echo "$(COLOR_YELLOW)Error: setup_tensorrt.sh not found$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@chmod +x $(SCRIPTS_DIR)/setup_tensorrt.sh
+	@$(SCRIPTS_DIR)/setup_tensorrt.sh
+
+verify-tensorrt: ## Check if TensorRT is available and configured
+	@echo "$(COLOR_BOLD)Verifying TensorRT...$(COLOR_RESET)"
+	@if [ -d "$(TENSORRT_DIR)" ] && [ -f "$(TENSORRT_LIB)/libnvinfer.so" ]; then \
+		echo "  $(COLOR_GREEN)✓ TensorRT found$(COLOR_RESET) at $(TENSORRT_DIR)"; \
+		echo "  Library: $$(ls -lh $(TENSORRT_LIB)/libnvinfer.so* | head -1 | awk '{print $$9 " (" $$5 ")"}')"; \
+	else \
+		echo "  $(COLOR_YELLOW)✗ TensorRT not found$(COLOR_RESET)"; \
+		echo "  Run: make setup-tensorrt"; \
+		exit 1; \
+	fi
+
+restart-recovery: ## Run post-restart setup (auto-called by on_start.sh)
+	@echo "$(COLOR_BOLD)=================================================="
+	@echo "Audio2Face MVP - Restart Recovery"
+	@echo "==================================================$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)1. Verifying TensorRT...$(COLOR_RESET)"
+	@$(MAKE) verify-tensorrt 2>/dev/null || $(MAKE) setup-tensorrt
+	@echo ""
+	@echo "$(COLOR_BOLD)2. Installing Python packages...$(COLOR_RESET)"
+	@pip install -q pybind11 numpy 2>/dev/null && echo "  $(COLOR_GREEN)✓ Python packages ready$(COLOR_RESET)" || echo "  $(COLOR_YELLOW)⚠ Some packages may need manual installation$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)3. Setting environment variables...$(COLOR_RESET)"
+	@echo "  export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH"
+	@echo "  $(COLOR_GREEN)✓ Add to your shell or on_start.sh$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)4. Verifying project structure...$(COLOR_RESET)"
+	@$(MAKE) verify-dirs
+	@echo ""
+	@echo "$(COLOR_GREEN)=================================================="
+	@echo "✓ Restart recovery complete!"
+	@echo "==================================================$(COLOR_RESET)"
+	@echo ""
+	@echo "Run: make status  # Check overall project status"
+	@echo "Run: make run     # Start backend and frontend"
+	@echo ""

@@ -1,104 +1,113 @@
-import ctypes
+"""
+Audio2Face SDK Python Wrapper
+Uses PyBind11 bindings for Audio2Face-3D SDK
+"""
+
 import numpy as np
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 from config import config
 import sys
 
 class Audio2FaceSDK:
-    """Python wrapper for Audio2Face-3D C++ SDK"""
+    """Python wrapper for Audio2Face-3D SDK using PyBind11 bindings"""
 
-    def __init__(self):
-        # Load shared library
-        if config.SDK_PATH.exists():
-            lib_name = "audio2x.dll" if sys.platform == "win32" else "libaudio2x.so"
-            lib_path = config.SDK_PATH / lib_name
-            if lib_path.exists():
-                self.lib = ctypes.CDLL(str(lib_path))
-            else:
-                raise FileNotFoundError(f"SDK library not found at {lib_path}")
-        else:
-            raise FileNotFoundError(f"SDK path not found at {config.SDK_PATH}")
+    def __init__(self, character_index: int = 0):
+        """
+        Initialize Audio2Face SDK
 
-        # Initialize SDK
-        self._setup_function_signatures()
-        self._initialize_model()
+        Args:
+            character_index: Character to use (0=Claire, 1=James, 2=Mark)
+        """
+        self.character_index = character_index
+        self.model_loaded = False
+        self.bundle = None
 
-    def _setup_function_signatures(self):
-        """Setup C function signatures"""
-        # Initialize model
-        self.lib.a2f_init.argtypes = [ctypes.c_char_p]
-        self.lib.a2f_init.restype = ctypes.c_int
+        try:
+            # Import PyBind11 module
+            import audio2face_py
+            self.a2f = audio2face_py
 
-        # Process audio
-        self.lib.a2f_process.argtypes = [
-            np.ctypeslib.ndpointer(dtype=np.float32),
-            ctypes.c_int,
-            ctypes.POINTER(ctypes.c_float),
-            ctypes.POINTER(ctypes.c_int)
-        ]
-        self.lib.a2f_process.restype = ctypes.c_int
+            # Load model
+            model_path = str(config.MODEL_PATH / "model.json")
+            if not Path(model_path).exists():
+                raise FileNotFoundError(f"Model not found at {model_path}")
 
-        # Cleanup
-        self.lib.a2f_cleanup.argtypes = []
-        self.lib.a2f_cleanup.restype = None
+            print(f"Loading Audio2Face model from: {model_path}")
+            print(f"Character: {self._get_character_name(character_index)}")
+            print(f"FPS: {config.FPS}")
 
-    def _initialize_model(self):
-        """Initialize Audio2Face model"""
-        model_path = str(config.MODEL_PATH).encode('utf-8')
-        result = self.lib.a2f_init(model_path)
-        if result != 0:
-            raise RuntimeError(f"Failed to initialize Audio2Face SDK: {result}")
-        print(f"✓ Audio2Face-3D-v3.0 model loaded from {config.MODEL_PATH}")
+            # Create blendshape model
+            self.bundle = self.a2f.load_blendshape_model(
+                model_path=model_path,
+                fps=config.FPS,
+                character_index=character_index
+            )
+
+            self.num_blendshapes = self.bundle.get_num_blendshapes()
+            self.model_loaded = True
+
+            print(f"✓ Audio2Face SDK initialized successfully")
+            print(f"✓ Blendshapes: {self.num_blendshapes}")
+
+        except ImportError as e:
+            print(f"✗ Failed to import audio2face_py module: {e}")
+            print("NOTE: PyBind11 wrapper needs to be built first")
+            print("Run: cd Audio2Face-3D-SDK && cmake --build _build --target audio2face_py")
+            raise RuntimeError("PyBind11 module not available") from e
+
+        except Exception as e:
+            print(f"✗ Failed to initialize Audio2Face SDK: {e}")
+            raise
 
     def process_audio(self, audio: np.ndarray) -> Dict:
         """
         Process audio and return blendshapes
 
+        Args:
+            audio: Audio data as float32 numpy array (16kHz mono)
+
         Returns:
-            {
-                'blendshapes': np.ndarray,  # Shape: (num_frames, 72)
-                'timestamps': np.ndarray,   # Shape: (num_frames,)
-                'fps': int,
-                'duration': float
-            }
+            Dictionary with:
+                - blendshapes: np.ndarray of shape (num_frames, num_blendshapes)
+                - timestamps: np.ndarray of frame timestamps
+                - fps: int
+                - duration: float
+                - num_frames: int
         """
-        # Ensure float32
+        if not self.model_loaded:
+            raise RuntimeError("SDK not initialized")
+
+        # Ensure audio is float32
         audio = audio.astype(np.float32)
 
-        # Allocate output buffer
-        num_frames = int(len(audio) / config.SAMPLE_RATE * config.FPS) + 1
-        blendshapes = np.zeros((num_frames, config.BLENDSHAPE_COUNT), dtype=np.float32)
-        actual_frames = ctypes.c_int(0)
+        # Normalize if needed
+        max_val = np.abs(audio).max()
+        if max_val > 1.0:
+            audio = audio / max_val
 
-        # Call SDK
-        result = self.lib.a2f_process(
-            audio,
-            len(audio),
-            blendshapes.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.byref(actual_frames)
-        )
+        print(f"Processing audio: {len(audio)} samples ({len(audio)/config.SAMPLE_RATE:.2f}s)")
 
-        if result != 0:
-            raise RuntimeError(f"Audio2Face processing failed: {result}")
+        # Process through SDK
+        blendshapes = self.bundle.process_audio(audio)
 
-        # Trim to actual frames
-        blendshapes = blendshapes[:actual_frames.value]
+        num_frames = blendshapes.shape[0]
+        timestamps = np.arange(num_frames) / config.FPS
+        duration = timestamps[-1] if num_frames > 0 else 0.0
 
-        # Generate timestamps
-        timestamps = np.arange(actual_frames.value) / config.FPS
+        print(f"✓ Generated {num_frames} frames ({duration:.2f}s)")
 
         return {
             'blendshapes': blendshapes,
             'timestamps': timestamps,
             'fps': config.FPS,
-            'duration': timestamps[-1] if len(timestamps) > 0 else 0.0
+            'duration': duration,
+            'num_frames': num_frames
         }
 
     def get_blendshape_names(self) -> List[str]:
-        """Get ARKit blendshape names"""
-        # Audio2Face outputs 72 blendshapes
-        # First 52 are standard ARKit, rest are additional
+        """Get list of blendshape names"""
+        # ARKit standard blendshapes (52)
         arkit_names = [
             "eyeBlinkLeft", "eyeLookDownLeft", "eyeLookInLeft", "eyeLookOutLeft",
             "eyeLookUpLeft", "eyeSquintLeft", "eyeWideLeft", "eyeBlinkRight",
@@ -115,12 +124,20 @@ class Audio2FaceSDK:
             "noseSneerRight", "tongueOut"
         ]
 
-        # Add Audio2Face specific blendshapes (52-72)
-        additional = [f"a2f_extra_{i}" for i in range(config.BLENDSHAPE_COUNT - 52)]
+        # Add extra blendshapes if model has more
+        if self.model_loaded and self.num_blendshapes > 52:
+            additional = [f"a2f_extra_{i}" for i in range(self.num_blendshapes - 52)]
+            return arkit_names + additional
 
-        return arkit_names + additional
+        return arkit_names
+
+    def _get_character_name(self, index: int) -> str:
+        """Get character name from index"""
+        characters = ["Claire", "James", "Mark"]
+        return characters[index] if index < len(characters) else f"Character_{index}"
 
     def __del__(self):
-        """Cleanup SDK"""
-        if hasattr(self, 'lib'):
-            self.lib.a2f_cleanup()
+        """Cleanup"""
+        if hasattr(self, 'bundle') and self.bundle:
+            del self.bundle
+            print("✓ Audio2Face SDK cleaned up")

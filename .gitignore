@@ -36,6 +36,10 @@ Audio2Face-3D-SDK/
 *.trt
 *.engine
 
+# Cached libraries (downloadable)
+libs/TensorRT/
+libs/*.tar.gz
+
 # Frontend
 node_modules/
 *.log
