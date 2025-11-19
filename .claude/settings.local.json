@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./scripts/setup_sdk.sh:*)",
+      "Bash(nvcc:*)",
+      "Bash(wget:*)",
+      "Bash(conda install:*)",
+      "Bash(conda list:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

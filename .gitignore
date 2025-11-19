@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Backend temp files
+backend/temp/
+backend/.installed
+*.wav
+*.mp3
+*.ogg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SDK and Models (large files)
+Audio2Face-3D-SDK/
+*.onnx
+*.plan
+*.trt
+*.engine
+
+# Frontend
+node_modules/
+*.log
+
+# Test files
+test_audio/*.wav
+!test_audio/generate_test_audio.py
+
+# Avatar files (user-specific)
+frontend/assets/*.glb
+frontend/assets/*.gltf
+
+# Environment
+.env
+.env.local
