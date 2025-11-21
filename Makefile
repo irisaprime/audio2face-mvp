@@ -27,7 +27,9 @@ COLOR_BLUE := \033[34m
 
 .PHONY: help install setup-sdk check test clean run-backend run-frontend run generate-test-audio \
         stop status setup-all dev-backend logs-backend logs-frontend clean-all install-system-deps \
-        quick-test open list verify-dirs download-model get-avatar build-sdk test-backend test-frontend
+        quick-test open list verify-dirs download-model get-avatar build-sdk test-backend test-frontend \
+        setup-pybind11 build-pybind11 install-pybind11 test-pybind11 pybind11-all setup-tensorrt \
+        verify-tensorrt restart-recovery
 
 # Default target
 .DEFAULT_GOAL := help
@@ -467,7 +469,7 @@ restart-recovery: ## Run post-restart setup (auto-called by on_start.sh)
 	@$(MAKE) verify-tensorrt 2>/dev/null || $(MAKE) setup-tensorrt
 	@echo ""
 	@echo "$(COLOR_BOLD)2. Installing Python packages...$(COLOR_RESET)"
-	@pip install -q pybind11 numpy 2>/dev/null && echo "  $(COLOR_GREEN)✓ Python packages ready$(COLOR_RESET)" || echo "  $(COLOR_YELLOW)⚠ Some packages may need manual installation$(COLOR_RESET)"
+	@pip install -q pybind11 numpy scipy 2>/dev/null && echo "  $(COLOR_GREEN)✓ Python packages ready$(COLOR_RESET)" || echo "  $(COLOR_YELLOW)⚠ Some packages may need manual installation$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BOLD)3. Setting environment variables...$(COLOR_RESET)"
 	@echo "  export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH"
@@ -480,6 +482,84 @@ restart-recovery: ## Run post-restart setup (auto-called by on_start.sh)
 	@echo "✓ Restart recovery complete!"
 	@echo "==================================================$(COLOR_RESET)"
 	@echo ""
-	@echo "Run: make status  # Check overall project status"
-	@echo "Run: make run     # Start backend and frontend"
+	@echo "Next steps:"
+	@echo "  make status           # Check overall status"
+	@echo "  make pybind11-all     # Build PyBind11 wrapper (if TensorRT ready)"
+	@echo "  make run              # Start servers"
+	@echo ""
+
+##@ PyBind11 Wrapper
+
+setup-pybind11: ## Install PyBind11 dependencies
+	@echo "$(COLOR_BOLD)Installing PyBind11 dependencies...$(COLOR_RESET)"
+	@pip install pybind11 numpy scipy
+	@echo "  $(COLOR_GREEN)✓ PyBind11 ready$(COLOR_RESET)"
+
+build-pybind11: verify-tensorrt ## Build PyBind11 Python module from SDK
+	@echo "$(COLOR_BOLD)Building PyBind11 wrapper...$(COLOR_RESET)"
+	@if [ ! -d "$(SDK_DIR)" ]; then \
+		echo "  $(COLOR_YELLOW)SDK directory not found$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@echo "  Checking python-wrapper directory..."
+	@if [ ! -f "$(SDK_DIR)/audio2face-sdk/source/samples/python-wrapper/audio2face_py.cpp" ]; then \
+		echo "  $(COLOR_YELLOW)PyBind11 source files not found$(COLOR_RESET)"; \
+		echo "  Expected: $(SDK_DIR)/audio2face-sdk/source/samples/python-wrapper/"; \
+		echo "  See AFTER_RESTART_CHECKLIST.md Step 4"; \
+		exit 1; \
+	fi
+	@echo "  $(COLOR_GREEN)✓ Source files found$(COLOR_RESET)"
+	@echo ""
+	@echo "  Adding python-wrapper to CMake..."
+	@if ! grep -q "add_subdirectory(python-wrapper)" $(SDK_DIR)/audio2face-sdk/source/samples/CMakeLists.txt 2>/dev/null; then \
+		echo "add_subdirectory(python-wrapper)" >> $(SDK_DIR)/audio2face-sdk/source/samples/CMakeLists.txt; \
+		echo "  $(COLOR_GREEN)✓ Added to CMakeLists.txt$(COLOR_RESET)"; \
+	else \
+		echo "  $(COLOR_YELLOW)Already in CMakeLists.txt$(COLOR_RESET)"; \
+	fi
+	@echo ""
+	@echo "  Configuring CMake with TensorRT..."
+	@cd $(SDK_DIR) && \
+		export LD_LIBRARY_PATH=$(TENSORRT_LIB):$$LD_LIBRARY_PATH && \
+		cmake -B _build -S . -DCMAKE_BUILD_TYPE=Release \
+			-DTENSORRT_ROOT_DIR=$(TENSORRT_DIR) \
+			-DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda
+	@echo ""
+	@echo "  Building audio2face_py module..."
+	@cd $(SDK_DIR) && \
+		export LD_LIBRARY_PATH=$(TENSORRT_LIB):$$LD_LIBRARY_PATH && \
+		cmake --build _build --target audio2face_py -j$$(nproc)
+	@echo ""
+	@echo "  $(COLOR_GREEN)✓ PyBind11 module built successfully$(COLOR_RESET)"
+	@ls -lh $(SDK_DIR)/_build/python/audio2face_py.*.so 2>/dev/null || echo "  $(COLOR_YELLOW)Warning: Module not found at expected location$(COLOR_RESET)"
+
+install-pybind11: ## Copy PyBind11 module to backend
+	@echo "$(COLOR_BOLD)Installing PyBind11 module to backend...$(COLOR_RESET)"
+	@if [ -f $(SDK_DIR)/_build/python/audio2face_py.*.so ]; then \
+		cp $(SDK_DIR)/_build/python/audio2face_py.*.so $(BACKEND_DIR)/ && \
+		echo "  $(COLOR_GREEN)✓ Module installed to backend/$(COLOR_RESET)" && \
+		ls -lh $(BACKEND_DIR)/audio2face_py.*.so; \
+	else \
+		echo "  $(COLOR_YELLOW)Module not found. Run: make build-pybind11$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+
+test-pybind11: ## Test PyBind11 module import
+	@echo "$(COLOR_BOLD)Testing PyBind11 module import...$(COLOR_RESET)"
+	@cd $(BACKEND_DIR) && \
+		$(PYTHON) -c "import audio2face_py; print('  $(COLOR_GREEN)✓ Module imported successfully!$(COLOR_RESET)')" || \
+		(echo "  $(COLOR_YELLOW)✗ Import failed. Check:$(COLOR_RESET)" && \
+		 echo "    1. Module exists: ls backend/audio2face_py.*.so" && \
+		 echo "    2. Run: make install-pybind11" && \
+		 exit 1)
+
+pybind11-all: setup-pybind11 build-pybind11 install-pybind11 test-pybind11 ## Complete PyBind11 setup (all steps)
+	@echo ""
+	@echo "$(COLOR_GREEN)=================================================="
+	@echo "✓ PyBind11 wrapper complete!"
+	@echo "==================================================$(COLOR_RESET)"
+	@echo ""
+	@echo "Next: Start the backend server"
+	@echo "  export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH"
+	@echo "  cd backend && $(PYTHON) main.py"
 	@echo ""

@@ -76,51 +76,58 @@ make setup-tensorrt
 
 ### Step 4: Build PyBind11 Python Module
 
+**🚀 Simple Way** (Recommended):
 ```bash
-cd /teamspace/studios/this_studio/audio2face-mvp/Audio2Face-3D-SDK
+cd /teamspace/studios/this_studio/audio2face-mvp
 
-# A. Install PyBind11
-pip install pybind11
-
-# B. Add python-wrapper to build
-echo "add_subdirectory(python-wrapper)" >> audio2face-sdk/source/samples/CMakeLists.txt
-
-# C. Set library path for TensorRT
-export LD_LIBRARY_PATH=/teamspace/studios/this_studio/audio2face-mvp/libs/TensorRT/lib:$LD_LIBRARY_PATH
-
-# D. Configure CMake with TensorRT
-cmake -B _build -S . -DCMAKE_BUILD_TYPE=Release \
-    -DTENSORRT_ROOT_DIR=/teamspace/studios/this_studio/audio2face-mvp/libs/TensorRT \
-    -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda
-
-# E. Build PyBind11 wrapper
-cmake --build _build --target audio2face_py -j$(nproc)
-
-# F. Copy Python module to backend
-cp _build/python/audio2face_py.*.so ../backend/
+# One command does everything!
+make pybind11-all
 ```
 
-**Expected**:
-- Build completes without errors
-- File created: `_build/python/audio2face_py.cpython-*.so`
-- File copied to: `backend/audio2face_py.*.so`
+**🔧 Manual Way** (If make command fails or you want step-by-step):
+```bash
+cd /teamspace/studios/this_studio/audio2face-mvp
+
+# Step by step
+make setup-pybind11      # Install pybind11, numpy, scipy
+make build-pybind11      # Build C++ module with TensorRT
+make install-pybind11    # Copy to backend/
+make test-pybind11       # Test import
+```
+
+**Expected Output**:
+```
+✓ PyBind11 dependencies installed
+✓ Source files found
+✓ Added to CMakeLists.txt
+✓ PyBind11 module built successfully
+✓ Module installed to backend/
+✓ Module imported successfully!
+✓ PyBind11 wrapper complete!
+```
+
+**If it fails**:
+- Ensure TensorRT is installed: `make verify-tensorrt`
+- Check PyBind11 files exist: `ls Audio2Face-3D-SDK/audio2face-sdk/source/samples/python-wrapper/`
 
 ---
 
-### Step 5: Test PyBind11 Module Import
+### Step 5: Verify Module is Ready
 
 ```bash
-cd /teamspace/studios/this_studio/audio2face-mvp/backend
+cd /teamspace/studios/this_studio/audio2face-mvp
 
-python3 -c "import audio2face_py; print('✓ Module loaded successfully!')"
+# Quick test
+make test-pybind11
 ```
 
-**Expected**: "✓ Module loaded successfully!"
+**Expected**: "✓ Module imported successfully!"
 
-**If it fails**: Check error message and ensure:
-- TensorRT libraries are in LD_LIBRARY_PATH
-- Module was copied to backend directory
-- No import errors
+**Or test manually**:
+```bash
+cd backend
+python3 -c "import audio2face_py; print('✓ SUCCESS!')"
+```
 
 ---
 
@@ -200,21 +207,37 @@ curl -X POST http://localhost:8000/process-audio \
 ## 🎯 Quick Commands Reference
 
 ```bash
-# Check status
+# Check overall status
 make status
 
-# Verify TensorRT
-make verify-tensorrt
+# TensorRT setup
+make setup-tensorrt       # Download and cache TensorRT
+make verify-tensorrt      # Check if TensorRT is installed
 
-# Run both servers (uses tmux)
-make run
+# PyBind11 wrapper
+make pybind11-all         # Complete setup (all steps)
+make setup-pybind11       # Install dependencies only
+make build-pybind11       # Build C++ module only
+make install-pybind11     # Copy module to backend
+make test-pybind11        # Test import
 
-# Stop servers
-make stop
+# Run servers
+make run                  # Start both (uses tmux)
+make run-backend          # Backend only
+make run-frontend         # Frontend only
+make stop                 # Stop all servers
 
 # View logs
 make logs-backend
 make logs-frontend
+
+# Testing
+make test-backend         # Test API endpoints
+make quick-test           # Quick audio processing test
+
+# Utilities
+make help                 # Show all commands
+make version              # Show version info
 ```
 
 ---
