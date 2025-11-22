@@ -29,7 +29,8 @@ COLOR_BLUE := \033[34m
         stop status setup-all dev-backend logs-backend logs-frontend clean-all install-system-deps \
         quick-test open list verify-dirs download-model get-avatar build-sdk test-backend test-frontend \
         setup-pybind11 build-pybind11 install-pybind11 test-pybind11 pybind11-all setup-tensorrt \
-        verify-tensorrt restart-recovery
+        verify-tensorrt restart-recovery verify-setup health-backend health-frontend health-all \
+        automated-setup persist-setup
 
 # Default target
 .DEFAULT_GOAL := help
@@ -69,7 +70,46 @@ verify-dirs: ## Verify all project directories exist
 	@test -d "$(TEST_AUDIO_DIR)" && echo "  ✓ test_audio/" || (echo "  ✗ test_audio/ missing!" && exit 1)
 	@echo "$(COLOR_GREEN)✓ All directories verified$(COLOR_RESET)"
 
+##@ Health Checks & Validation
+
+verify-setup: ## Run comprehensive system verification
+	@echo "$(COLOR_BOLD)Running comprehensive system verification...$(COLOR_RESET)"
+	@chmod +x $(SCRIPTS_DIR)/verify_setup.sh
+	@$(SCRIPTS_DIR)/verify_setup.sh
+
+health-backend: ## Check backend health and dependencies
+	@echo "$(COLOR_BOLD)Checking backend health...$(COLOR_RESET)"
+	@cd $(BACKEND_DIR) && $(PYTHON) health_validator.py
+
+health-frontend: ## Check frontend health (requires backend running)
+	@echo "$(COLOR_BOLD)Checking frontend health...$(COLOR_RESET)"
+	@echo "Opening browser console to view health checks..."
+	@echo "Visit: http://localhost:3000 and open DevTools (F12)"
+	@echo "Health check results will be logged to console."
+
+health-all: health-backend health-frontend ## Run all health checks
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ All health checks complete$(COLOR_RESET)"
+	@echo "For comprehensive verification, run: make verify-setup"
+
 ##@ Setup Commands
+
+automated-setup: ## Run complete automated setup (builds everything)
+	@echo "$(COLOR_BOLD)Running automated setup...$(COLOR_RESET)"
+	@chmod +x $(SCRIPTS_DIR)/automated_setup.sh
+	@$(SCRIPTS_DIR)/automated_setup.sh
+
+persist-setup: ## Configure persistence for Lightning.ai restarts
+	@echo "$(COLOR_BOLD)Configuring persistence...$(COLOR_RESET)"
+	@chmod +x on_start.sh
+	@echo "  ✓ on_start.sh configured"
+	@echo ""
+	@echo "To enable auto-start on Lightning.ai:"
+	@echo "  1. Go to Studio Settings"
+	@echo "  2. Add 'Startup Command': bash /teamspace/studios/this_studio/audio2face-mvp/on_start.sh"
+	@echo "  3. Save settings"
+	@echo ""
+	@echo "Or manually run: ./on_start.sh"
 
 check: ## Check system requirements and dependencies
 	@echo "$(COLOR_BOLD)Checking system requirements...$(COLOR_RESET)"
@@ -505,7 +545,7 @@ build-pybind11: verify-tensorrt ## Build PyBind11 Python module from SDK
 	@if [ ! -f "$(SDK_DIR)/audio2face-sdk/source/samples/python-wrapper/audio2face_py.cpp" ]; then \
 		echo "  $(COLOR_YELLOW)PyBind11 source files not found$(COLOR_RESET)"; \
 		echo "  Expected: $(SDK_DIR)/audio2face-sdk/source/samples/python-wrapper/"; \
-		echo "  See AFTER_RESTART_CHECKLIST.md Step 4"; \
+		echo "  Run: git status in SDK directory to check"; \
 		exit 1; \
 	fi
 	@echo "  $(COLOR_GREEN)✓ Source files found$(COLOR_RESET)"
@@ -517,6 +557,10 @@ build-pybind11: verify-tensorrt ## Build PyBind11 Python module from SDK
 	else \
 		echo "  $(COLOR_YELLOW)Already in CMakeLists.txt$(COLOR_RESET)"; \
 	fi
+	@echo ""
+	@echo "  Creating python output directory..."
+	@mkdir -p $(SDK_DIR)/_build/python
+	@echo "  $(COLOR_GREEN)✓ Output directory ready$(COLOR_RESET)"
 	@echo ""
 	@echo "  Configuring CMake with TensorRT..."
 	@cd $(SDK_DIR) && \
