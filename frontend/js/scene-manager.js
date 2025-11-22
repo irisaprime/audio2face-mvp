@@ -6,6 +6,12 @@ class SceneManager {
         this.renderer = null;
         this.controls = null;
 
+        // Check if THREE.js is loaded
+        if (typeof THREE === 'undefined') {
+            console.error('THREE.js not loaded!');
+            throw new Error('THREE.js library not available');
+        }
+
         this.init();
         this.animate();
 

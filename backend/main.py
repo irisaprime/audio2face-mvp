@@ -4,10 +4,31 @@ from fastapi.responses import JSONResponse
 from pathlib import Path
 import uuid
 import traceback
+import sys
 
 from config import config
 from audio_utils import AudioProcessor
 from a2f_wrapper import Audio2FaceSDK
+from health_validator import run_all_checks
+
+# Run health checks on startup
+print("\n" + "="*60)
+print("Audio2Face Backend - Startup Validation")
+print("="*60 + "\n")
+
+validator = run_all_checks(verbose=True)
+
+if not validator.is_healthy():
+    print("\n❌ Critical issues detected. Backend may not function properly.")
+    print("Fix the issues above and restart the backend.\n")
+    # Don't exit - allow backend to start for debugging
+else:
+    summary = validator.get_summary()
+    if summary['warnings'] > 0:
+        print(f"\n⚠️  Backend starting with {summary['warnings']} warning(s).")
+        print("Some features may be unavailable.\n")
+    else:
+        print("\n✅ All checks passed. Starting backend...\n")
 
 # Initialize FastAPI
 app = FastAPI(title="Audio2Face API", version="1.0.0")

@@ -49,8 +49,8 @@ test_audio/*.wav
 !test_audio/generate_test_audio.py
 
 # Avatar files (user-specific)
-frontend/assets/*.glb
-frontend/assets/*.gltf
+# frontend/assets/*.glb
+# frontend/assets/*.gltf
 
 # Environment
 .env

@@ -40,25 +40,25 @@ done
 # Step 2: Configure environment
 log "Step 2: Configuring environment..."
 
-# Get TensorRT path
-TENSORRT_LIBS=$(find /home/zeus/miniconda3/envs/cloudspace/lib/python*/site-packages -name "tensorrt_libs" -type d 2>/dev/null | head -1)
+# Use system TensorRT installation
+TENSORRT_DIR="/usr/lib/x86_64-linux-gnu"
 
-if [ -n "$TENSORRT_LIBS" ]; then
-    log "  ✓ TensorRT found: $TENSORRT_LIBS"
+if [ -f "$TENSORRT_DIR/libnvinfer.so" ]; then
+    log "  ✓ TensorRT found: $TENSORRT_DIR"
 
     # Create/update env_setup.sh
     cat > "$PROJECT_ROOT/env_setup.sh" <<EOF
 #!/bin/bash
 export PROJECT_ROOT="$PROJECT_ROOT"
-export TENSORRT_DIR="$TENSORRT_LIBS"
-export LD_LIBRARY_PATH="$TENSORRT_LIBS:\$PROJECT_ROOT/Audio2Face-3D-SDK/_build/audio2x-sdk/lib:\$LD_LIBRARY_PATH"
+export TENSORRT_DIR="$TENSORRT_DIR"
+export LD_LIBRARY_PATH="$TENSORRT_DIR:\$PROJECT_ROOT/Audio2Face-3D-SDK/_build/audio2x-sdk/lib:\$LD_LIBRARY_PATH"
 export PYBIND11_CMAKE=\$(python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
 export CMAKE_PREFIX_PATH="\$PYBIND11_CMAKE:\$CMAKE_PREFIX_PATH"
 EOF
     chmod +x "$PROJECT_ROOT/env_setup.sh"
     log "  ✓ Environment configuration saved"
 else
-    log "  ⚠ TensorRT not found"
+    log "  ⚠ TensorRT not found at $TENSORRT_DIR"
 fi
 
 # Step 3: Check SDK build

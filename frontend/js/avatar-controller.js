@@ -9,11 +9,25 @@ class AvatarController {
 
     async loadAvatar(url) {
         return new Promise((resolve, reject) => {
+            // Check if GLTFLoader is available
+            if (typeof THREE.GLTFLoader === 'undefined') {
+                console.error('GLTFLoader not available');
+                reject(new Error('GLTFLoader not loaded'));
+                return;
+            }
+
             const loader = new THREE.GLTFLoader();
+
+            // Set a timeout to prevent infinite hanging
+            const timeout = setTimeout(() => {
+                console.warn('Avatar loading timed out after 10 seconds');
+                reject(new Error('Avatar loading timeout'));
+            }, 10000);
 
             loader.load(
                 url,
                 (gltf) => {
+                    clearTimeout(timeout);
                     this.avatar = gltf.scene;
                     this.avatar.position.set(0, 0, 0);
 
@@ -33,10 +47,13 @@ class AvatarController {
                     resolve();
                 },
                 (progress) => {
-                    const percent = (progress.loaded / progress.total * 100).toFixed(0);
-                    console.log(`Loading avatar: ${percent}%`);
+                    if (progress.total > 0) {
+                        const percent = (progress.loaded / progress.total * 100).toFixed(0);
+                        console.log(`Loading avatar: ${percent}%`);
+                    }
                 },
                 (error) => {
+                    clearTimeout(timeout);
                     console.error('✗ Failed to load avatar:', error);
                     reject(error);
                 }

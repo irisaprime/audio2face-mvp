@@ -15,8 +15,10 @@ PYTHON := python3
 VENV_DIR := $(BACKEND_DIR)/venv
 BACKEND_PORT := 8000
 FRONTEND_PORT := 3000
-TENSORRT_DIR := $(PROJECT_ROOT)/libs/TensorRT
-TENSORRT_LIB := $(TENSORRT_DIR)/lib
+# Use system TensorRT installation (Lightning.ai has it pre-installed)
+TENSORRT_DIR := /usr/lib/x86_64-linux-gnu
+TENSORRT_LIB := $(TENSORRT_DIR)
+ENV_SETUP := $(PROJECT_ROOT)/env_setup.sh
 
 # Colors for output
 COLOR_RESET := \033[0m
@@ -75,11 +77,21 @@ verify-dirs: ## Verify all project directories exist
 verify-setup: ## Run comprehensive system verification
 	@echo "$(COLOR_BOLD)Running comprehensive system verification...$(COLOR_RESET)"
 	@chmod +x $(SCRIPTS_DIR)/verify_setup.sh
-	@$(SCRIPTS_DIR)/verify_setup.sh
+	@if [ -f "$(ENV_SETUP)" ]; then \
+		bash -c "source $(ENV_SETUP) && $(SCRIPTS_DIR)/verify_setup.sh"; \
+	else \
+		$(SCRIPTS_DIR)/verify_setup.sh; \
+	fi
 
 health-backend: ## Check backend health and dependencies
 	@echo "$(COLOR_BOLD)Checking backend health...$(COLOR_RESET)"
-	@cd $(BACKEND_DIR) && $(PYTHON) health_validator.py
+	@if [ -f "$(ENV_SETUP)" ]; then \
+		cd $(BACKEND_DIR) && bash -c "source $(ENV_SETUP) && $(PYTHON) health_validator.py"; \
+	else \
+		cd $(BACKEND_DIR) && \
+		export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && \
+		$(PYTHON) health_validator.py; \
+	fi
 
 health-frontend: ## Check frontend health (requires backend running)
 	@echo "$(COLOR_BOLD)Checking frontend health...$(COLOR_RESET)"
@@ -103,6 +115,21 @@ persist-setup: ## Configure persistence for Lightning.ai restarts
 	@echo "$(COLOR_BOLD)Configuring persistence...$(COLOR_RESET)"
 	@chmod +x on_start.sh
 	@echo "  ✓ on_start.sh configured"
+	@echo ""
+	@# Add environment setup to .bashrc if not already there
+	@if ! grep -q "audio2face-mvp/env_setup.sh" ~/.bashrc 2>/dev/null; then \
+		echo "" >> ~/.bashrc; \
+		echo "# Audio2Face MVP - Auto-load environment" >> ~/.bashrc; \
+		echo "if [ -f \"$(ENV_SETUP)\" ]; then" >> ~/.bashrc; \
+		echo "    source $(ENV_SETUP)" >> ~/.bashrc; \
+		echo "fi" >> ~/.bashrc; \
+		echo "  $(COLOR_GREEN)✓ Added env_setup.sh to ~/.bashrc$(COLOR_RESET)"; \
+	else \
+		echo "  $(COLOR_YELLOW)env_setup.sh already in ~/.bashrc$(COLOR_RESET)"; \
+	fi
+	@echo ""
+	@echo "Environment will be automatically loaded in new shells."
+	@echo "For current shell, run: source env_setup.sh"
 	@echo ""
 	@echo "To enable auto-start on Lightning.ai:"
 	@echo "  1. Go to Studio Settings"
@@ -214,9 +241,15 @@ run-backend: ## Start FastAPI backend server
 		echo "$(COLOR_YELLOW)Virtual environment not found. Run 'make install' first.$(COLOR_RESET)"; \
 		exit 1; \
 	fi
-	@cd $(BACKEND_DIR) && \
+	@if [ -f "$(ENV_SETUP)" ]; then \
+		cd $(BACKEND_DIR) && \
+		bash -c "source $(ENV_SETUP) && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+	else \
+		cd $(BACKEND_DIR) && \
 		. $(VENV_DIR)/bin/activate && \
-		$(PYTHON) main.py
+		export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && \
+		$(PYTHON) main.py; \
+	fi
 
 run-frontend: ## Start frontend HTTP server
 	@echo "$(COLOR_BOLD)Starting frontend server...$(COLOR_RESET)"
@@ -232,8 +265,13 @@ run: ## Start both backend and frontend (uses tmux if available)
 	@echo ""
 	@if command -v tmux >/dev/null 2>&1; then \
 		echo "$(COLOR_GREEN)Using tmux for parallel execution...$(COLOR_RESET)"; \
-		tmux new-session -d -s audio2face-backend \
-			"cd $(BACKEND_DIR) && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+		if [ -f "$(ENV_SETUP)" ]; then \
+			tmux new-session -d -s audio2face-backend \
+				"cd $(BACKEND_DIR) && source $(ENV_SETUP) && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+		else \
+			tmux new-session -d -s audio2face-backend \
+				"cd $(BACKEND_DIR) && export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+		fi; \
 		tmux new-session -d -s audio2face-frontend \
 			"cd $(FRONTEND_DIR) && $(PYTHON) -m http.server $(FRONTEND_PORT)"; \
 		echo ""; \
@@ -506,14 +544,27 @@ restart-recovery: ## Run post-restart setup (auto-called by on_start.sh)
 	@echo "==================================================$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BOLD)1. Verifying TensorRT...$(COLOR_RESET)"
-	@$(MAKE) verify-tensorrt 2>/dev/null || $(MAKE) setup-tensorrt
+	@if [ -f "$(TENSORRT_LIB)/libnvinfer.so" ]; then \
+		echo "  $(COLOR_GREEN)✓ TensorRT found at $(TENSORRT_DIR)$(COLOR_RESET)"; \
+	else \
+		echo "  $(COLOR_YELLOW)⚠ TensorRT not found$(COLOR_RESET)"; \
+	fi
 	@echo ""
 	@echo "$(COLOR_BOLD)2. Installing Python packages...$(COLOR_RESET)"
 	@pip install -q pybind11 numpy scipy 2>/dev/null && echo "  $(COLOR_GREEN)✓ Python packages ready$(COLOR_RESET)" || echo "  $(COLOR_YELLOW)⚠ Some packages may need manual installation$(COLOR_RESET)"
 	@echo ""
-	@echo "$(COLOR_BOLD)3. Setting environment variables...$(COLOR_RESET)"
-	@echo "  export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH"
-	@echo "  $(COLOR_GREEN)✓ Add to your shell or on_start.sh$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)3. Ensuring environment setup...$(COLOR_RESET)"
+	@if [ ! -f "$(ENV_SETUP)" ]; then \
+		echo "Creating env_setup.sh..."; \
+		echo "#!/bin/bash" > $(ENV_SETUP); \
+		echo "export PROJECT_ROOT=\"$(PROJECT_ROOT)\"" >> $(ENV_SETUP); \
+		echo "export TENSORRT_DIR=\"$(TENSORRT_DIR)\"" >> $(ENV_SETUP); \
+		echo "export LD_LIBRARY_PATH=\"$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:\$$LD_LIBRARY_PATH\"" >> $(ENV_SETUP); \
+		echo "export PYBIND11_CMAKE=\$$(python -c \"import pybind11; print(pybind11.get_cmake_dir())\" 2>/dev/null)" >> $(ENV_SETUP); \
+		echo "export CMAKE_PREFIX_PATH=\"\$$PYBIND11_CMAKE:\$$CMAKE_PREFIX_PATH\"" >> $(ENV_SETUP); \
+		chmod +x $(ENV_SETUP); \
+	fi
+	@echo "  $(COLOR_GREEN)✓ Environment setup ready: source env_setup.sh$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BOLD)4. Verifying project structure...$(COLOR_RESET)"
 	@$(MAKE) verify-dirs
@@ -604,6 +655,9 @@ pybind11-all: setup-pybind11 build-pybind11 install-pybind11 test-pybind11 ## Co
 	@echo "==================================================$(COLOR_RESET)"
 	@echo ""
 	@echo "Next: Start the backend server"
-	@echo "  export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH"
+	@echo "  make run-backend"
+	@echo ""
+	@echo "Or manually:"
+	@echo "  source env_setup.sh"
 	@echo "  cd backend && $(PYTHON) main.py"
 	@echo ""
