@@ -27,7 +27,7 @@ COLOR_GREEN := \033[32m
 COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
-.PHONY: help install setup-sdk check test clean run-backend run-frontend run generate-test-audio \
+.PHONY: help install setup-sdk check test clean run-backend run-backend-cpu run-frontend run generate-test-audio \
         stop status setup-all dev-backend logs-backend logs-frontend clean-all install-system-deps \
         quick-test open list verify-dirs download-model get-avatar build-sdk test-backend test-frontend \
         setup-pybind11 build-pybind11 install-pybind11 test-pybind11 pybind11-all setup-tensorrt \
@@ -144,20 +144,30 @@ check: ## Check system requirements and dependencies
 
 install: verify-dirs ## Install all Python dependencies
 	@echo "$(COLOR_BOLD)Installing Python dependencies...$(COLOR_RESET)"
-	@echo "Creating virtual environment in: $(VENV_DIR)"
-	@if [ ! -d "$(VENV_DIR)" ]; then \
-		$(PYTHON) -m venv $(VENV_DIR); \
-		echo "  $(COLOR_GREEN)✓ Virtual environment created$(COLOR_RESET)"; \
+	@# Check if we're on Lightning.ai (which doesn't allow venv)
+	@if [ -n "$$LIGHTNING_CLOUD_PROJECT_ID" ] || [ -d "/teamspace" ]; then \
+		echo "  $(COLOR_YELLOW)Lightning.ai detected - using system Python$(COLOR_RESET)"; \
+		echo "Installing dependencies to system Python..."; \
+		cd $(BACKEND_DIR) && \
+			pip install --upgrade pip -q && \
+			pip install -r requirements.txt -q; \
+		echo "  $(COLOR_GREEN)✓ Dependencies installed successfully!$(COLOR_RESET)"; \
 	else \
-		echo "  $(COLOR_YELLOW)Virtual environment already exists$(COLOR_RESET)"; \
+		echo "Creating virtual environment in: $(VENV_DIR)"; \
+		if [ ! -d "$(VENV_DIR)" ]; then \
+			$(PYTHON) -m venv $(VENV_DIR); \
+			echo "  $(COLOR_GREEN)✓ Virtual environment created$(COLOR_RESET)"; \
+		else \
+			echo "  $(COLOR_YELLOW)Virtual environment already exists$(COLOR_RESET)"; \
+		fi; \
+		echo "Installing dependencies..."; \
+		cd $(BACKEND_DIR) && \
+			. $(VENV_DIR)/bin/activate && \
+			pip install --upgrade pip -q && \
+			pip install -r requirements.txt -q && \
+			touch $(VENV_DIR)/.installed; \
+		echo "$(COLOR_GREEN)✓ Dependencies installed successfully!$(COLOR_RESET)"; \
 	fi
-	@echo "Installing dependencies..."
-	@cd $(BACKEND_DIR) && \
-		. $(VENV_DIR)/bin/activate && \
-		pip install --upgrade pip -q && \
-		pip install -r requirements.txt -q && \
-		touch $(VENV_DIR)/.installed
-	@echo "$(COLOR_GREEN)✓ Dependencies installed successfully!$(COLOR_RESET)"
 
 install-system-deps: ## Install system dependencies (Ubuntu/Debian, requires sudo)
 	@echo "$(COLOR_BOLD)Installing system dependencies...$(COLOR_RESET)"
@@ -237,19 +247,40 @@ run-backend: ## Start FastAPI backend server
 	@echo "Docs: http://localhost:$(BACKEND_PORT)/docs"
 	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
 	@echo ""
-	@if [ ! -d "$(VENV_DIR)" ]; then \
-		echo "$(COLOR_YELLOW)Virtual environment not found. Run 'make install' first.$(COLOR_RESET)"; \
+	@# Check if dependencies are installed
+	@if ! $(PYTHON) -c "import fastapi" 2>/dev/null; then \
+		echo "$(COLOR_YELLOW)Dependencies not found. Run 'make install' first.$(COLOR_RESET)"; \
 		exit 1; \
 	fi
+	@# Run with environment setup
 	@if [ -f "$(ENV_SETUP)" ]; then \
-		cd $(BACKEND_DIR) && \
-		bash -c "source $(ENV_SETUP) && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+		if [ -d "$(VENV_DIR)" ] && [ -f "$(VENV_DIR)/bin/activate" ]; then \
+			cd $(BACKEND_DIR) && \
+			bash -c "source $(ENV_SETUP) && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+		else \
+			cd $(BACKEND_DIR) && \
+			bash -c "source $(ENV_SETUP) && $(PYTHON) main.py"; \
+		fi \
 	else \
-		cd $(BACKEND_DIR) && \
-		. $(VENV_DIR)/bin/activate && \
-		export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && \
-		$(PYTHON) main.py; \
+		if [ -d "$(VENV_DIR)" ] && [ -f "$(VENV_DIR)/bin/activate" ]; then \
+			cd $(BACKEND_DIR) && \
+			. $(VENV_DIR)/bin/activate && \
+			export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && \
+			$(PYTHON) main.py; \
+		else \
+			cd $(BACKEND_DIR) && \
+			export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && \
+			$(PYTHON) main.py; \
+		fi \
 	fi
+
+run-backend-cpu: ## Start backend in CPU-only mode (GPU disabled, SDK unavailable)
+	@echo "$(COLOR_BOLD)Starting backend in CPU-only mode...$(COLOR_RESET)"
+	@echo "$(COLOR_YELLOW)Note: GPU disabled to avoid CUDA/TensorRT crashes$(COLOR_RESET)"
+	@echo "$(COLOR_YELLOW)SDK will report as 'unhealthy' but API will work$(COLOR_RESET)"
+	@echo ""
+	@chmod +x $(SCRIPTS_DIR)/run_backend_cpu_mode.sh
+	@$(SCRIPTS_DIR)/run_backend_cpu_mode.sh
 
 run-frontend: ## Start frontend HTTP server
 	@echo "$(COLOR_BOLD)Starting frontend server...$(COLOR_RESET)"
@@ -266,14 +297,24 @@ run: ## Start both backend and frontend (uses tmux if available)
 	@if command -v tmux >/dev/null 2>&1; then \
 		echo "$(COLOR_GREEN)Using tmux for parallel execution...$(COLOR_RESET)"; \
 		if [ -f "$(ENV_SETUP)" ]; then \
-			tmux new-session -d -s audio2face-backend \
-				"cd $(BACKEND_DIR) && source $(ENV_SETUP) && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+			if [ -d "$(VENV_DIR)" ] && [ -f "$(VENV_DIR)/bin/activate" ]; then \
+				tmux new-session -d -s audio2face-backend \
+					bash -c "source $(ENV_SETUP) && cd $(BACKEND_DIR) && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+			else \
+				tmux new-session -d -s audio2face-backend \
+					bash -c "source $(ENV_SETUP) && cd $(BACKEND_DIR) && $(PYTHON) main.py"; \
+			fi \
 		else \
-			tmux new-session -d -s audio2face-backend \
-				"cd $(BACKEND_DIR) && export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+			if [ -d "$(VENV_DIR)" ] && [ -f "$(VENV_DIR)/bin/activate" ]; then \
+				tmux new-session -d -s audio2face-backend \
+					bash -c "export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && cd $(BACKEND_DIR) && . $(VENV_DIR)/bin/activate && $(PYTHON) main.py"; \
+			else \
+				tmux new-session -d -s audio2face-backend \
+					bash -c "export LD_LIBRARY_PATH=$(TENSORRT_LIB):$(SDK_DIR)/_build/audio2x-sdk/lib:$$LD_LIBRARY_PATH && cd $(BACKEND_DIR) && $(PYTHON) main.py"; \
+			fi \
 		fi; \
 		tmux new-session -d -s audio2face-frontend \
-			"cd $(FRONTEND_DIR) && $(PYTHON) -m http.server $(FRONTEND_PORT)"; \
+			bash -c "cd $(FRONTEND_DIR) && $(PYTHON) -m http.server $(FRONTEND_PORT)"; \
 		echo ""; \
 		echo "$(COLOR_GREEN)✓ Backend started$(COLOR_RESET) in tmux session 'audio2face-backend'"; \
 		echo "$(COLOR_GREEN)✓ Frontend started$(COLOR_RESET) in tmux session 'audio2face-frontend'"; \
@@ -391,6 +432,13 @@ status: ## Show comprehensive project status
 	@if [ -d "$(VENV_DIR)" ]; then \
 		echo "  ✓ Virtual environment exists ($(VENV_DIR))"; \
 		if [ -f "$(VENV_DIR)/.installed" ]; then \
+			echo "  ✓ Dependencies installed"; \
+		else \
+			echo "  $(COLOR_YELLOW)⚠ Dependencies may need installation (run: make install)$(COLOR_RESET)"; \
+		fi \
+	elif [ -n "$$LIGHTNING_CLOUD_PROJECT_ID" ] || [ -d "/teamspace" ]; then \
+		echo "  ✓ Using system Python (Lightning.ai)"; \
+		if $(PYTHON) -c "import fastapi" 2>/dev/null; then \
 			echo "  ✓ Dependencies installed"; \
 		else \
 			echo "  $(COLOR_YELLOW)⚠ Dependencies may need installation (run: make install)$(COLOR_RESET)"; \
@@ -661,3 +709,48 @@ pybind11-all: setup-pybind11 build-pybind11 install-pybind11 test-pybind11 ## Co
 	@echo "  source env_setup.sh"
 	@echo "  cd backend && $(PYTHON) main.py"
 	@echo ""
+
+##@ Docker Commands
+
+build-docker: ## Build Docker image
+	@echo "$(COLOR_BOLD)Building Docker image...$(COLOR_RESET)"
+	@docker-compose build
+	@echo "$(COLOR_GREEN)✓ Docker image built$(COLOR_RESET)"
+
+run-docker: ## Run with Docker Compose
+	@echo "$(COLOR_BOLD)Starting Audio2Face with Docker...$(COLOR_RESET)"
+	@docker-compose up -d
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Services started$(COLOR_RESET)"
+	@echo "  Frontend:  http://localhost:3000"
+	@echo "  Backend:   http://localhost:8000"
+	@echo "  API Docs:  http://localhost:8000/docs"
+	@echo ""
+	@echo "View logs: docker-compose logs -f"
+	@echo "Stop:      docker-compose down"
+
+stop-docker: ## Stop Docker containers
+	@echo "$(COLOR_BOLD)Stopping Docker services...$(COLOR_RESET)"
+	@docker-compose down
+	@echo "$(COLOR_GREEN)✓ Services stopped$(COLOR_RESET)"
+
+logs-docker: ## View Docker logs
+	@docker-compose logs -f
+
+shell-docker: ## Shell into backend container
+	@docker-compose exec backend bash
+
+save-docker: ## Save Docker image to persistent storage (Lightning.ai)
+	@echo "$(COLOR_BOLD)Saving Docker image...$(COLOR_RESET)"
+	@./docker-save.sh save
+
+load-docker: ## Load Docker image from persistent storage (Lightning.ai)
+	@echo "$(COLOR_BOLD)Loading Docker image...$(COLOR_RESET)"
+	@./docker-save.sh load
+
+test-docker: ## Test Docker GPU access
+	@echo "$(COLOR_BOLD)Testing Docker GPU access...$(COLOR_RESET)"
+	@docker run --rm --gpus all nvidia/cuda:12.6.0-base nvidia-smi
+
+docker-all: build-docker save-docker run-docker ## Complete Docker setup and run
+	@echo "$(COLOR_GREEN)✓ Docker setup complete$(COLOR_RESET)"

@@ -83,8 +83,12 @@ cmake --build _build --config Release -- -j$(nproc)
 # Verify build
 echo ""
 echo "Verifying build..."
-if [ -f "_build/release/audio2face-sdk/bin/libaudio2face-sdk.so" ]; then
+if [ -f "_build/audio2x-sdk/lib/libaudio2x.so" ]; then
     echo "✓ SDK built successfully!"
+    echo "  Main library: _build/audio2x-sdk/lib/libaudio2x.so"
+    if [ -f "_build/python/audio2face_py.cpython-312-x86_64-linux-gnu.so" ]; then
+        echo "  Python wrapper: _build/python/audio2face_py.*.so"
+    fi
 else
     echo "✗ SDK build failed. Check error messages above."
     exit 1

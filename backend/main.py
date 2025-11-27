@@ -42,6 +42,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize CUDA before TensorRT (FIX for error 35)
+# See: https://stackoverflow.com/questions/58369731/adding-multiple-inference-on-tensorrt-invalid-resource-handle-error
+print("🔧 Applying CUDA initialization fix for TensorRT...")
+try:
+    from cuda_init_fix import initialize_cuda_driver, initialize_cuda_runtime, preload_cuda_libraries
+    print("   Preloading CUDA libraries...")
+    preload_cuda_libraries()
+    print("   Initializing CUDA driver...")
+    initialize_cuda_driver()
+    print("   Initializing CUDA runtime...")
+    initialize_cuda_runtime()
+    print("✓ CUDA pre-initialized successfully\n")
+except Exception as e:
+    print(f"⚠ CUDA pre-initialization failed: {e}")
+    print("  Continuing anyway...\n")
+
 # Initialize Audio2Face SDK
 try:
     a2f_sdk = Audio2FaceSDK()

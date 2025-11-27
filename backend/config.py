@@ -4,6 +4,7 @@ class Config:
     # Paths
     SDK_PATH = Path("../Audio2Face-3D-SDK/_build/audio2x-sdk/lib")
     MODEL_PATH = Path("../Audio2Face-3D-SDK/models/Audio2Face-3D-v3.0")
+    A2F_MODEL_PATH = Path("../Audio2Face-3D-SDK/models/Audio2Face-3D-v3.0")  # Alias for compatibility
     TEMP_DIR = Path("./temp")
 
     # Audio settings
