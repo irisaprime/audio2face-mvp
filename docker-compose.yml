@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: audio2face-mvp:latest
+    container_name: audio2face-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - CUDA_MODULE_LOADING=EAGER
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      # Persistent storage
+      - backend-temp:/app/backend/temp
+      # Mount models (optional - if you want to update models without rebuild)
+      - ./Audio2Face-3D-SDK/models:/app/Audio2Face-3D-SDK/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - audio2face-network
+
+  frontend:
+    image: python:3.12-slim
+    container_name: audio2face-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app/frontend:ro
+    working_dir: /app/frontend
+    command: python -m http.server 3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - audio2face-network
+
+volumes:
+  backend-temp:
+    driver: local
+
+networks:
+  audio2face-network:
+    driver: bridge

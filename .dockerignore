@@ -1,0 +1,45 @@
+# Build artifacts
+Audio2Face-3D-SDK/_build/
+Audio2Face-3D-SDK/_deps/
+backend/__pycache__/
+backend/*.pyc
+backend/audio2face_py*.so
+*.pyc
+__pycache__/
+
+# Git and version control
+.git/
+.gitignore
+
+# Documentation
+*.md
+CHANGELOG
+README.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment and config
+.env
+.env.local
+.claude/
+
+# Docker files (no need to copy into image)
+Dockerfile
+docker-compose.yml
+docker-build.sh
+docker-save.sh
+.dockerignore
+
+# Test and temporary files
+test_output/
+temp/
+*.tmp
+
+# Scripts that run on host
+on_start.sh
+env_setup.sh

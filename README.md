@@ -4,137 +4,151 @@ Real-time audio-driven facial animation using NVIDIA Audio2Face-3D SDK.
 
 ## Quick Start
 
-### Prerequisites
-- NVIDIA GPU with CUDA 12.6+
-- TensorRT 10.7+ at `/usr/local/TensorRT`
-- Python 3.10+, Node.js 18+
-
-### Setup (5 minutes)
+### Option A: Docker (Recommended - Works Everywhere)
 
 ```bash
-# 1. Build SDK
-cd Audio2Face-3D-SDK
-./scripts/setup_sdk.sh
-cd ..
+# Build and run with GPU
+docker-compose up --build
 
-# 2. Download models (requires Hugging Face login)
-huggingface-cli login
-huggingface-cli download nvidia/Audio2Face-3D-v3.0 \
-  --local-dir Audio2Face-3D-SDK/models/Audio2Face-3D-v3.0
-
-# 3. Install backend dependencies
-cd backend
-pip install -r requirements.txt
-cd ..
-
-# 4. Install frontend dependencies
-cd frontend
-npm install
-cd ..
+# Access:
+# - Frontend: http://localhost:3000
+# - Backend API: http://localhost:8000
+# - API Docs: http://localhost:8000/docs
 ```
 
-### Run
+### Option B: Native (Lightning.ai / Local GPU)
 
 ```bash
-# Terminal 1: Backend
-cd backend && python main.py
+# Setup
+make setup-all
 
-# Terminal 2: Frontend
-cd frontend && npm run dev
+# Run
+make run
+
+# Or separately:
+make run-backend  # Terminal 1
+make run-frontend # Terminal 2
 ```
 
-Open `http://localhost:3000`
+## Requirements
 
-## Verify Setup
+- **Docker**: NVIDIA Docker runtime with `--gpus` support
+- **Native**:
+  - NVIDIA GPU (L4, A100, etc.)
+  - CUDA 12.6+
+  - TensorRT 10.x
+  - Python 3.12
 
-```bash
-cd backend && python test_sdk.py
-```
-
-All checks should show ✓
-
-## Project Structure
+## Architecture
 
 ```
 audio2face-mvp/
-├── Audio2Face-3D-SDK/         # NVIDIA C++ SDK
-│   ├── _build/                # Compiled library (8.9MB)
-│   └── models/                # Downloaded models (1.5GB, not in git)
-├── backend/                   # FastAPI server (port 8000)
-│   ├── main.py               # API endpoints
-│   ├── test_sdk.py           # Infrastructure check
-│   └── config.py             # SDK paths
-├── frontend/                  # React + Three.js UI (port 3000)
-├── scripts/                  # Build scripts
-└── SETUP_COMPLETE.md         # Detailed setup notes
+├── backend/           # FastAPI server + Audio2Face SDK
+├── frontend/          # Web UI (Three.js + GLB avatar)
+├── Audio2Face-3D-SDK/ # NVIDIA SDK (built from source)
+├── Dockerfile         # Production container
+├── docker-compose.yml # Multi-service setup
+└── Makefile          # Build & run automation
 ```
 
-## Status
+## Docker Commands
 
-✅ Audio2Face SDK compiled
-✅ TensorRT + CUDA configured
-✅ Models downloaded (1.5GB from Hugging Face)
-✅ Backend API running
-✅ Frontend running
-
-## Next Implementation Steps
-
-1. **Python SDK bindings** - PyBind11 wrapper for C++ API
-2. **Audio processing** - Handle uploaded WAV files
-3. **Animation pipeline** - Connect SDK to Three.js
-4. **Real-time streaming** - WebSocket support
-
-## Architecture Notes
-
-The SDK uses C++ classes (not C functions):
-- `IBlendshapeExecutor` - Outputs 72 blendshape weights per frame
-- `IGeometryExecutor` - Outputs vertex positions directly
-
-Sample executables in `_build/audio2face-sdk/bin/` can be called via subprocess for quick MVP testing.
-
-## Key Files
-
-- `backend/a2f_wrapper.py` - SDK wrapper (needs PyBind11 implementation)
-- `backend/config.py` - Paths to SDK and models
-- `Audio2Face-3D-SDK/models/Audio2Face-3D-v3.0/model.json` - Model config
-- `Audio2Face-3D-SDK/models/Audio2Face-3D-v3.0/network.onnx` - 692MB neural network
-
-## Models
-
-Models are downloaded from Hugging Face (not stored in git):
-- **network.onnx** - 692MB main model
-- **Characters** - Claire, James, Mark
-- **Blendshapes** - Skin + tongue (15MB + 1.1MB per character)
-
-Re-download anytime:
 ```bash
-huggingface-cli download nvidia/Audio2Face-3D-v3.0 \
-  --local-dir Audio2Face-3D-SDK/models/Audio2Face-3D-v3.0
+# Build image
+docker-compose build
+
+# Run services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f backend
+
+# Stop services
+docker-compose down
+
+# Rebuild after changes
+docker-compose up --build
+
+# Shell into container
+docker-compose exec backend bash
+```
+
+## Makefile Commands
+
+```bash
+make help          # Show all commands
+make verify-setup  # Check system requirements
+make build-docker  # Build Docker image
+make run-docker    # Run via Docker Compose
+make run           # Run natively
+make stop          # Stop all services
+make clean         # Clean temporary files
+```
+
+## API Endpoints
+
+- `GET /` - API info
+- `GET /health` - Health check
+- `GET /blendshape-names` - List all 72 blendshapes
+- `POST /process-audio` - Upload audio, get blendshapes
+- `GET /docs` - Interactive API documentation
+
+## Development
+
+### Rebuild SDK
+```bash
+make setup-sdk
+```
+
+### Test API
+```bash
+curl http://localhost:8000/health
+```
+
+### Run tests
+```bash
+make test
 ```
 
 ## Troubleshooting
 
-**SDK undefined symbol errors**: SDK is C++, not C. Needs PyBind11 bindings or subprocess wrapper.
-
-**Port 8000 in use**: Kill existing backend process
+### TensorRT Error on Host
+**Solution**: Use Docker - it has proper GPU passthrough:
 ```bash
-lsof -ti:8000 | xargs kill -9
+docker-compose up --build
 ```
 
-**Models not found**: Run the huggingface-cli download command above
-
-**CUDA/TensorRT errors**: Verify installation
+### Docker Image Not Persisting (Lightning.ai)
+**Solution**: Use `docker-save.sh` to save/load images:
 ```bash
-nvcc --version
-ls /usr/local/TensorRT/
+./docker-save.sh save    # Save to persistent storage
+./docker-save.sh load    # Load after restart
 ```
 
-## Repository
+### GPU Not Detected in Container
+**Solution**: Check NVIDIA Docker runtime:
+```bash
+docker run --rm --gpus all nvidia/cuda:12.6.0-base nvidia-smi
+```
 
-https://github.com/irisaprime/audio2face-mvp
+## Environment Variables
 
-## Resources
+```bash
+# Backend
+CUDA_MODULE_LOADING=EAGER
+NVIDIA_VISIBLE_DEVICES=all
+NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-- [Audio2Face-3D SDK](https://github.com/NVIDIA/Audio2Face-3D-SDK)
-- [Model on Hugging Face](https://huggingface.co/nvidia/Audio2Face-3D-v3.0)
-- API docs: `http://localhost:8000/docs` (when backend running)
+# Model paths (auto-configured)
+MODEL_PATH=../Audio2Face-3D-SDK/models/Audio2Face-3D-v3.0
+```
+
+## License
+
+This project uses NVIDIA Audio2Face-3D SDK. See SDK license terms.
+
+## Links
+
+- [NVIDIA Audio2Face-3D](https://github.com/NVIDIA/Audio2Face-3D-SDK)
+- [Ready Player Me](https://readyplayer.me/) (Avatar creator)
+- [FastAPI Docs](https://fastapi.tiangolo.com/)
