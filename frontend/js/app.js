@@ -1,5 +1,7 @@
-// Configuration
-const API_URL = 'http://localhost:8000';
+// Configuration - Dynamic backend URL
+const API_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : `http://${window.location.hostname}:8000`;
 
 // Global instances
 let sceneManager;

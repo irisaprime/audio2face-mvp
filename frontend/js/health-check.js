@@ -119,7 +119,12 @@ healthChecker.addCheck('OrbitControls', async () => {
 // Check 4: Backend connectivity
 healthChecker.addCheck('Backend API', async () => {
     try {
-        const response = await fetch('http://localhost:8000/health', {
+        // Use dynamic backend URL based on current hostname
+        const backendUrl = window.location.hostname === 'localhost'
+            ? 'http://localhost:8000'
+            : `http://${window.location.hostname}:8000`;
+
+        const response = await fetch(`${backendUrl}/health`, {
             signal: AbortSignal.timeout(5000)
         });
         const data = await response.json();
@@ -132,8 +137,8 @@ healthChecker.addCheck('Backend API', async () => {
     } catch (error) {
         return {
             passed: false,
-            message: 'Cannot connect to backend. Is it running?',
-            fix: 'Start backend with: make run-backend'
+            message: `Cannot connect to backend at ${window.location.hostname}:8000. Is it running?`,
+            fix: 'Start backend with: make run-backend or docker compose up'
         };
     }
 }, true);
@@ -141,7 +146,12 @@ healthChecker.addCheck('Backend API', async () => {
 // Check 5: SDK Status
 healthChecker.addCheck('Audio2Face SDK', async () => {
     try {
-        const response = await fetch('http://localhost:8000/health');
+        // Use dynamic backend URL based on current hostname
+        const backendUrl = window.location.hostname === 'localhost'
+            ? 'http://localhost:8000'
+            : `http://${window.location.hostname}:8000`;
+
+        const response = await fetch(`${backendUrl}/health`);
         const data = await response.json();
 
         if (data.sdk_loaded) {
