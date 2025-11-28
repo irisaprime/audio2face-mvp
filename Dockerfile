@@ -52,6 +52,9 @@ RUN cmake -B _build -S . \
 # Copy Python module to backend
 RUN cp _build/python/audio2face_py*.so /app/backend/
 
+# Make scripts executable
+RUN chmod +x /app/scripts/rebuild_tensorrt_engine.sh /app/scripts/entrypoint.sh
+
 # Set environment variables
 ENV LD_LIBRARY_PATH=/app/Audio2Face-3D-SDK/_build/audio2x-sdk/lib:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 ENV PYTHONPATH=/app/backend:${PYTHONPATH}
@@ -63,9 +66,9 @@ EXPOSE 8000
 # Change to backend directory
 WORKDIR /app/backend
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+# Health check (longer start period to allow TensorRT engine rebuild)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
 
-# Run backend server
-CMD ["python", "main.py"]
+# Use entrypoint script to rebuild TensorRT engine and start server
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]

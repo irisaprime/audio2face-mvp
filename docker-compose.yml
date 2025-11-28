@@ -23,8 +23,8 @@ services:
     volumes:
       # Persistent storage
       - backend-temp:/app/backend/temp
-      # Mount models (optional - if you want to update models without rebuild)
-      - ./Audio2Face-3D-SDK/models:/app/Audio2Face-3D-SDK/models:ro
+      # Persist rebuilt TensorRT engines
+      - tensorrt-engines:/app/Audio2Face-3D-SDK/models/Audio2Face-3D-v3.0
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
@@ -58,6 +58,8 @@ services:
 
 volumes:
   backend-temp:
+    driver: local
+  tensorrt-engines:
     driver: local
 
 networks:
