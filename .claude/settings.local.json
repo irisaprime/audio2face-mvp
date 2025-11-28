@@ -56,7 +56,19 @@
       "Bash(then echo 'Build process completed' break fi echo 'Still building... $(date)' done)",
       "Bash(docker-compose up:*)",
       "Bash(docker compose:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(python3:*)",
+      "Bash(docker inspect:*)",
+      "Bash(git restore:*)",
+      "Bash(do docker compose ps)",
+      "Bash(break)",
+      "Bash(done)",
+      "Bash(while ! docker compose ps)",
+      "Bash(do sleep 5)",
+      "Bash(while docker compose ps backend)",
+      "Bash(do sleep 10)",
+      "Bash(while ! docker compose ps backend)",
+      "Bash(do sleep 3)"
     ],
     "deny": [],
     "ask": []

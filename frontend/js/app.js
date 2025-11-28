@@ -1,7 +1,26 @@
 // Configuration - Dynamic backend URL
-const API_URL = window.location.hostname === 'localhost'
-    ? 'http://localhost:8000'
-    : `http://${window.location.hostname}:8000`;
+function getBackendURL() {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+
+    // Local development
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:8000';
+    }
+
+    // Lightning.ai pattern: PORT-STUDIOID.cloudspaces.litng.ai
+    if (hostname.includes('.cloudspaces.litng.ai')) {
+        // Replace port 3000 with 8000 in the hostname
+        const backendHostname = hostname.replace(/^3000-/, '8000-');
+        return `${protocol}//${backendHostname}`;
+    }
+
+    // Default: same hostname, different port
+    return `${protocol}//${hostname}:8000`;
+}
+
+const API_URL = getBackendURL();
+console.log('Backend URL:', API_URL);
 
 // Global instances
 let sceneManager;
@@ -264,5 +283,15 @@ function animateProgress() {
     }, 100);
 }
 
-// Start application
-init();
+// Start application after THREE.js addons are ready
+if (typeof THREE !== 'undefined' && THREE.OrbitControls && THREE.GLTFLoader) {
+    // Addons already loaded
+    init();
+} else {
+    // Wait for addons to load
+    console.log('⏳ Waiting for THREE.js addons to load...');
+    window.addEventListener('three-addons-ready', () => {
+        console.log('✓ THREE.js addons ready, starting app...');
+        init();
+    });
+}

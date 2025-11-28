@@ -66,23 +66,94 @@ class AvatarController {
     }
 
     applyBlendshapes(frameIndex) {
-        if (!this.morphTargets || !this.blendshapeData) return;
+        if (!this.blendshapeData) return;
 
         const blendshapes = this.blendshapeData.blendshapes[frameIndex];
         const names = this.blendshapeData.names;
 
-        // Apply each blendshape
-        for (let i = 0; i < blendshapes.length && i < names.length; i++) {
-            const name = names[i];
-            const value = blendshapes[i];
+        // Debug: Log on first frame
+        if (frameIndex === 0) {
+            console.log('🎭 Blendshape Mapping Debug:');
+            console.log('Backend blendshape names:', names.slice(0, 10));
+            if (this.morphTargets) {
+                console.log('Avatar morph targets:', Object.keys(this.morphTargets.morphTargetDictionary).slice(0, 10));
 
-            // Map Audio2Face blendshape to Ready Player Me
-            const morphIndex = this.morphTargets.morphTargetDictionary[name];
-
-            if (morphIndex !== undefined) {
-                this.morphTargets.morphTargetInfluences[morphIndex] = value;
+                let matchCount = 0;
+                names.forEach(name => {
+                    if (this.morphTargets.morphTargetDictionary[name] !== undefined) {
+                        matchCount++;
+                    }
+                });
+                console.log(`Matched ${matchCount} / ${names.length} blendshapes`);
+            } else {
+                console.log('No avatar with morph targets loaded');
             }
         }
+
+        // Update debug panel with top blendshapes
+        this.updateDebugPanel(blendshapes, names);
+
+        // Apply to avatar if available
+        if (this.morphTargets) {
+            for (let i = 0; i < blendshapes.length && i < names.length; i++) {
+                const name = names[i];
+                const value = blendshapes[i];
+
+                const morphIndex = this.morphTargets.morphTargetDictionary[name];
+                if (morphIndex !== undefined) {
+                    this.morphTargets.morphTargetInfluences[morphIndex] = value;
+                }
+            }
+        }
+    }
+
+    updateDebugPanel(blendshapes, names) {
+        const debugPanel = document.getElementById('blendshape-debug');
+        const debugValues = document.getElementById('blendshape-values');
+
+        if (!debugPanel || !debugValues) {
+            console.log('❌ Debug panel elements not found:', {
+                debugPanel: !!debugPanel,
+                debugValues: !!debugValues
+            });
+            return;
+        }
+
+        // Show debug panel
+        debugPanel.style.display = 'block';
+        console.log('✅ Debug panel visible, updating with', names.length, 'blendshapes');
+
+        // Get top 10 active blendshapes
+        const blendshapeArray = names.map((name, i) => ({
+            name: name,
+            value: blendshapes[i]
+        }));
+
+        // Sort by value (highest first) and take top 10
+        const topBlendshapes = blendshapeArray
+            .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+            .slice(0, 10);
+
+        // Create visualization
+        let html = '<div style="padding: 5px;">';
+        topBlendshapes.forEach(bs => {
+            const percentage = (bs.value * 100).toFixed(1);
+            const barWidth = Math.abs(bs.value) * 100;
+            html += `
+                <div style="margin-bottom: 3px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 10px;">${bs.name}</span>
+                        <span style="font-size: 10px; font-weight: bold;">${percentage}%</span>
+                    </div>
+                    <div style="background: #ddd; height: 4px; border-radius: 2px; margin-top: 2px;">
+                        <div style="background: #4CAF50; height: 4px; width: ${barWidth}%; border-radius: 2px;"></div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+
+        debugValues.innerHTML = html;
     }
 
     reset() {

@@ -152,3 +152,8 @@ This project uses NVIDIA Audio2Face-3D SDK. See SDK license terms.
 - [NVIDIA Audio2Face-3D](https://github.com/NVIDIA/Audio2Face-3D-SDK)
 - [Ready Player Me](https://readyplayer.me/) (Avatar creator)
 - [FastAPI Docs](https://fastapi.tiangolo.com/)
+
+
+---
+
+# very important : for download avatar from the ready player me: use this'?morphTargets=ARKit'

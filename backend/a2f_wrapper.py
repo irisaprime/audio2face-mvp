@@ -65,6 +65,27 @@ class Audio2FaceSDK:
             print(f"✗ Failed to initialize Audio2Face SDK: {e}")
             raise
 
+    def reset_bundle(self):
+        """
+        Reset the bundle by recreating it
+        This is needed because the SDK maintains execution state that can't be cleared
+        """
+        if not self.model_loaded:
+            return
+
+        # Delete old bundle
+        if self.bundle:
+            del self.bundle
+
+        # Recreate bundle with same parameters
+        model_path = str(config.MODEL_PATH / "model.json")
+        self.bundle = self.a2f.BlendshapeModel(
+            model_path=model_path,
+            character_index=self.character_index,
+            use_gpu_solver=self.use_gpu_solver,
+            constant_noise=False
+        )
+
     def process_audio(self, audio: np.ndarray) -> Dict:
         """
         Process audio and return blendshapes
@@ -82,6 +103,9 @@ class Audio2FaceSDK:
         """
         if not self.model_loaded:
             raise RuntimeError("SDK not initialized")
+
+        # Reset bundle before each request to clear execution state
+        self.reset_bundle()
 
         # Ensure audio is float32 and 1D
         audio = audio.astype(np.float32)

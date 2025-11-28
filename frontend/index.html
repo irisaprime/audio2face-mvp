@@ -49,13 +49,44 @@
                 <p><strong>Frames:</strong> <span id="frame-count">0</span></p>
                 <p><strong>Duration:</strong> <span id="duration">0.0s</span></p>
             </div>
+
+            <div class="info-box" id="blendshape-debug" style="display:none;">
+                <h3>Blendshape Debug</h3>
+                <div id="blendshape-values" style="max-height: 200px; overflow-y: auto; font-size: 11px; font-family: monospace;">
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Three.js -->
+    <!-- Import Map for ES Modules -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <!-- Three.js Core (for legacy global THREE object) -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+
+    <!-- Load OrbitControls and GLTFLoader as modules and expose globally -->
+    <script type="module">
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // Expose to global THREE object
+        window.THREE = window.THREE || {};
+        window.THREE.OrbitControls = OrbitControls;
+        window.THREE.GLTFLoader = GLTFLoader;
+
+        console.log('✓ OrbitControls loaded');
+        console.log('✓ GLTFLoader loaded');
+
+        // Dispatch event when addons are ready
+        window.dispatchEvent(new Event('three-addons-ready'));
+    </script>
 
     <!-- App Scripts -->
     <script src="js/health-check.js"></script>

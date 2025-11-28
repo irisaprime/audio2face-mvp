@@ -120,9 +120,27 @@ healthChecker.addCheck('OrbitControls', async () => {
 healthChecker.addCheck('Backend API', async () => {
     try {
         // Use dynamic backend URL based on current hostname
-        const backendUrl = window.location.hostname === 'localhost'
-            ? 'http://localhost:8000'
-            : `http://${window.location.hostname}:8000`;
+        function getBackendURL() {
+            const hostname = window.location.hostname;
+            const protocol = window.location.protocol;
+
+            // Local development
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'http://localhost:8000';
+            }
+
+            // Lightning.ai pattern: PORT-STUDIOID.cloudspaces.litng.ai
+            if (hostname.includes('.cloudspaces.litng.ai')) {
+                // Replace port 3000 with 8000 in the hostname
+                const backendHostname = hostname.replace(/^3000-/, '8000-');
+                return `${protocol}//${backendHostname}`;
+            }
+
+            // Default: same hostname, different port
+            return `${protocol}//${hostname}:8000`;
+        }
+
+        const backendUrl = getBackendURL();
 
         const response = await fetch(`${backendUrl}/health`, {
             signal: AbortSignal.timeout(5000)
@@ -147,9 +165,23 @@ healthChecker.addCheck('Backend API', async () => {
 healthChecker.addCheck('Audio2Face SDK', async () => {
     try {
         // Use dynamic backend URL based on current hostname
-        const backendUrl = window.location.hostname === 'localhost'
-            ? 'http://localhost:8000'
-            : `http://${window.location.hostname}:8000`;
+        function getBackendURL() {
+            const hostname = window.location.hostname;
+            const protocol = window.location.protocol;
+
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'http://localhost:8000';
+            }
+
+            if (hostname.includes('.cloudspaces.litng.ai')) {
+                const backendHostname = hostname.replace(/^3000-/, '8000-');
+                return `${protocol}//${backendHostname}`;
+            }
+
+            return `${protocol}//${hostname}:8000`;
+        }
+
+        const backendUrl = getBackendURL();
 
         const response = await fetch(`${backendUrl}/health`);
         const data = await response.json();
